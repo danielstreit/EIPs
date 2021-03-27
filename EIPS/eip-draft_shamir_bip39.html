@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Simple Summary</title>
+        <style>
+</style>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.2/dist/katex.min.css" integrity="sha384-yFRtMMDnQtDRO8rLpMIKrtPCD5jdktao2TV19YiZYWMDkUR5GQZR/NOVTdquEx1j" crossorigin="anonymous">
+<link href="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.css" rel="stylesheet" type="text/css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item { list-style-type: none; } .task-list-item-checkbox { margin-left: -20px; vertical-align: middle; }
+</style>
+        
+        <script src="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.js"></script>
+        
+    </head>
+    <body class="vscode-body vscode-light">
+        <hr>
+<h2 id="eip-3445title-standardized-shamir-secret-sharing-scheme-for-bip-39-mnemonicsauthor-daniel-streit-danielstreitstatus-drafttype-standards-trackcategory-erccreated-2021-03-29">eip: 3445
+title: Standardized Shamir Secret Sharing Scheme for BIP-39 Mnemonics
+author: Daniel Streit (@danielstreit)
+status: Draft
+type: Standards Track
+category: ERC
+created: 2021-03-29</h2>
+<h2 id="simple-summary">Simple Summary</h2>
+<p>A standardized algorithm for applying Shamir's Secret Sharing Scheme to BIP-39 mnemonics.</p>
+<h2 id="abstract">Abstract</h2>
+<p>A standardized approach to splitting a BIP-39 mnemonic into <em>N</em> BIP-39 mnemonics, called shares, so that <em>T</em> shares are required to recover the original
+mnemonic and no information about the original mnemonic, other than its size, is leaked with less than <em>T</em> shares.</p>
+<h2 id="motivation">Motivation</h2>
+<p>Mnemonics are a great UX (and security) improvement over hex secrets. But, they are still a single point of failure.</p>
+<p>Shamir's Secret Sharing Scheme is great for sharing secrets so that there is no single point of failure. But, there is no standard implementation of Sharmir's, putting recovery at risk.</p>
+<p>In this EIP, we combine mnemonics with Sharmir's Secret Sharing Scheme and propose a standardized algorithm to make storing keys easier and more secure.</p>
+<h2 id="specification">Specification</h2>
+<p>For a general overview of Shamir's Secret Sharing Scheme see:</p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing">Wikipedia: Shamir's Secret Sharing</a></li>
+<li><a href="https://github.com/satoshilabs/slips/blob/master/slip-0039.md#shamirs-secret-sharing">SLIP-0039: Shamir's Secret-Sharing for Mnemonic Codes</a></li>
+</ul>
+<p>There are two operations: Splitting a BIP-39 mnemonic into shares and recovering the original mnemonic with a subset of the shares.</p>
+<p>We use the <a href="https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt">standard BIP-39 english word list</a> with 2048 words, in a 0-indexed array.</p>
+<p>Accordingly, we use GF(2048) (or GF(2<sup>11</sup>)) with primitive polynomial x<sup>11</sup> + x<sup>2</sup> + 1 (or 5) for all arithmetic.</p>
+<h3 id="definition-share">Definition: Share</h3>
+<p>A share represents a point on the curve described by the underlying polynomial used to split the secret. It includes two pieces of data:</p>
+<ul>
+<li>An id: the <em>x</em> value of the share</li>
+<li>A BIP-39 mnemonic: the <em>y</em> value of the share represented by a mnemonic</li>
+</ul>
+<h3 id="polynomial-interpolation">Polynomial Interpolation</h3>
+<p>Interpolation is used to recover the mnemonic. See <a href="#recover-mnemonic">Recover Mnemonic</a> below.</p>
+<p>This follows the <a href="https://github.com/satoshilabs/slips/blob/master/slip-0039.md#polynomial-interpolation">SLIP-0039 specification for polynomial interpolation</a> closely.</p>
+<p>Given a set of <em>K</em> points (<em>x<sub>i</sub></em>, <em>y<sub>i</sub></em>), 1 ≤ <em>i</em> ≤ <em>K</em>, such that no two <em>x<sub>i</sub></em> values equal,
+there exists a polynomial that assumes the value <em>y<sub>i</sub></em> at each point <em>x<sub>i</sub></em>. The polynomial of lowest degree
+that satisfies these conditions is uniquely determined and can be obtained using the Lagrange interpolation formula given below.</p>
+<p>Shamir's secret sharing scheme is applied separately to each of the <em>n</em> words (or, the integer representation of each word) of the shared mnemonic, so we work with
+<em>y<sub>i</sub></em> as a vector of <em>n</em> values, where <em>y<sub>i</sub></em>[<em>l</em>] = <em>f<sub>l</sub></em>(<em>x<sub>i</sub></em>), 1 ≤ <em>l</em> ≤ <em>n</em>,
+and <em>f<sub>j</sub></em> is the polynomial in the <em>j</em>-th instance of the scheme.</p>
+<p>Interpolate(<em>x</em>, {(<em>x<sub>i</sub></em>, <em>y<sub>i</sub></em>), 1 ≤ <em>i</em> ≤ <em>K</em>})</p>
+<p>Input: the desired index <em>x</em>, a set of index/value-vector pairs {(<em>x<sub>i</sub></em>, <em>y<sub>i</sub></em>), 1 ≤ <em>i</em> ≤ <em>K</em>} ⊆ GF(2048) × GF(2048)<sup>n</sup></p>
+<p>Output: the value-vector (<em>f<sub>1</sub></em>(<em>x</em>), ... , <em>f<sub>n</sub></em>(<em>x</em>))</p>
+<p><em>f<sub>l</sub></em>(<em>x</em>) = <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>K</mi></msubsup><msub><mi>y</mi><mi>i</mi></msub><mo stretchy="false">[</mo><mi>l</mi><mo stretchy="false">]</mo><msubsup><mo>∏</mo><mi><munder><mo><mi>j</mi><mo>=</mo><mn>1</mn></mo><mrow><mi>j</mi><mo mathvariant="normal">≠</mo><mi>i</mi></mrow></munder></mi><mi>K</mi></msubsup><mfrac><mrow><mi>x</mi><mo>−</mo><msub><mi>x</mi><mi>j</mi></msub></mrow><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><msub><mi>x</mi><mi>j</mi></msub></mrow></mfrac></mrow><annotation encoding="application/x-tex">\sum_{i=1}^{K} y_i[l] \prod_{\underset{j \neq i}{j=1}}^{K} \frac{x - x_j}{x_i - x_j}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.077789em;vertical-align:-1.096558em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:-0.0000050000000000050004em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.981231em;"><span style="top:-2.40029em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">i</span><span class="mrel mtight">=</span><span class="mord mtight">1</span></span></span></span><span style="top:-3.2029em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight" style="margin-right:0.07153em;">K</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.29971000000000003em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.16666666666666666em;"></span><span class="mord"><span class="mord mathdefault" style="margin-right:0.03588em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.31166399999999994em;"><span style="top:-2.5500000000000003em;margin-left:-0.03588em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">[</span><span class="mord mathdefault" style="margin-right:0.01968em;">l</span><span class="mclose">]</span><span class="mspace" style="margin-right:0.16666666666666666em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:-0.0000050000000000050004em;">∏</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9812309999999999em;"><span style="top:-2.40029em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mop op-limits mtight"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6595200000000001em;"><span style="top:-1.8435314285714288em;margin-left:0em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathdefault mtight" style="margin-right:0.05724em;">j</span><span class="mrel mtight"><span class="mrel mtight"><span class="mord mtight"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.69444em;"><span style="top:-2.69444em;"><span class="pstrut" style="height:2.69444em;"></span><span class="rlap mtight"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="inner"><span class="mrel mtight"></span></span><span class="fix"></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.19444em;"><span></span></span></span></span></span></span><span class="mrel mtight">=</span></span><span class="mord mathdefault mtight">i</span></span></span></span><span style="top:-2.7em;"><span class="pstrut" style="height:2.7em;"></span><span><span class="mop mtight"><span class="mord mathdefault mtight" style="margin-right:0.05724em;">j</span><span class="mrel mtight">=</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.1383542857142857em;"><span></span></span></span></span></span></span></span></span></span><span style="top:-3.2029em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight" style="margin-right:0.07153em;">K</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.096558em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.16666666666666666em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.915651em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathdefault mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3280857142857143em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.07142857142857144em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathdefault mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathdefault mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3280857142857143em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.07142857142857144em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathdefault mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2818857142857143em;"><span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.50732em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathdefault mtight">x</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathdefault mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3280857142857143em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.07142857142857144em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathdefault mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2818857142857143em;"><span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.5423199999999999em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></p>
+<h3 id="split-mnemonic">Split Mnemonic</h3>
+<p>Inputs: BIP-39 mnemonic, number of shares (<em>N</em>), threshold (<em>T</em>)</p>
+<p>Output: N Shares, each share including an id (<em>x</em> ⊆ GF(2048)) and a BIP-39 mnemonic</p>
+<ol>
+<li>Check the following conditions:
+<ul>
+<li>1 &lt; T &lt;= N &lt; 2048</li>
+<li>Each word in the mnemonic belongs to the word list
+<ul>
+<li>Note: It isn't explicitly required that the mnemonic comply with the BIP-39 specification</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Convert the mnemonic to a value-vector, where each value is the index of the corresponding word in the word list</li>
+<li>Define values:
+<ul>
+<li>Let <em>E</em> be the value-vector representation of the mnemonic</li>
+<li>Let <em>n</em> be the length of <em>E</em></li>
+<li>Let <em>coeff<sub>1</sub></em>, ... , <em>coeff<sub>T - 1</sub></em> ∈ GF(2048)<em><sup>n</sup></em> be value-vectors generated randomly, independently with uniform distribution from a source suitable for generating cryptographic keys</li>
+</ul>
+</li>
+<li>Evaluate the polynomial for each share
+<ul>
+<li>For each <em>x</em> from 1 to <em>N</em>, evaluate the polynomial <em>f(x)</em> = <em>E</em> + <em>coeff<sub>1</sub>x<sup>1</sup></em> + ... + coeff<sub>T - 1</sub>x<sup>T - 1</sup>, where <em>x</em> is the share id and <em>f(x)</em> is the share value (as a vector of integers)</li>
+</ul>
+</li>
+<li>Define values:
+<ul>
+<li>Let <em>x</em> be the the share id</li>
+<li>Let <em>f(x)</em> be <em>y</em>, the share value-vector</li>
+</ul>
+</li>
+<li>Convert each share value-vector to a mnemonic using each value to lookup a word by index in the word list</li>
+<li>Return the id and mnemonic of each share</li>
+</ol>
+<h3 id="recover-mnemonic">Recover Mnemonic</h3>
+<p>Input: <em>K</em> Shares, where <em>T</em> &lt;= K &lt;= <em>N</em></p>
+<p>Output: The original mnemonic</p>
+<ol>
+<li>Convert each share mnemonic to a value-vector, where each value is the index of the corresponding word in the word list</li>
+<li>Define values:
+<ul>
+<li>Let <em>y<sub>k</sub></em> be the value-vector of share <em>k</em></li>
+<li>Let <em>x<sub>k</sub></em> be the id of share <em>k</em></li>
+</ul>
+</li>
+<li>Calculate <em>E</em> = Interpolate(0, [(<em>x<sub>1</sub></em>, <em>y<sub>1</sub></em>),...,(<em>x<sub>K</sub></em>, <em>y<sub>K</sub></em>)])
+<ul>
+<li>See <a href="#polynomial-interpolation">Polynomial Interpolation</a> above</li>
+</ul>
+</li>
+<li>Convert <em>E</em> to a mnemonic using each value to lookup a word by index in the word list</li>
+</ol>
+<h2 id="test-cases">Test Cases</h2>
+<p><a href="https://github.com/danielstreit/shamir-bip-39/blob/272333114ce03dfb5f4ed94f7ddb22e7cc0c93c4/test/vectors.ts">Test vectors</a></p>
+<p>All implementations must be able to:</p>
+<ul>
+<li>Split and recover each <code>mnemonic</code> with the given <code>numShares</code> and <code>threshold</code>.</li>
+<li>Recover the <code>mnemonic</code> from the given <code>knownShares</code>.</li>
+</ul>
+<h2 id="reference-implementation">Reference Implementation</h2>
+<p><a href="https://github.com/danielstreit/shamir-bip-39">https://github.com/danielstreit/shamir-bip-39</a></p>
+<h2 id="security-considerations">Security Considerations</h2>
+<p>The shares produced by the specification include an id in addition to the BIP-39 mnemonic. This raises two security concerns:</p>
+<p>Users <strong>must</strong> keep this id in order to recover the original mnemonic. If the id is lost, or separated from the share mnemonic, it may not be
+possible to recover the original. (Brute force recovery may or may not be possible depending on how much is known about the number of shares and threshold)</p>
+<p>The additional data may hint to an attacker of the existence of other keys and the scheme under which they are stored. Ideally,
+if we could only store the BIP-39 mnemonic, this would be indistinguishable from any other BIP-39 mnemonic and an attacker may not
+look for additional shares. If an attacker recognized that the BIP-39 mnemonic came with an id, it might hint to them that there
+are additional shares.</p>
+<p>A potential alternative specification might include a &quot;digest&quot; in the polynomial that could be used to validate the recovered secret. See, for example,
+<a href="https://github.com/satoshilabs/slips/blob/master/slip-0039.md#shamirs-secret-sharing">SLIP-0039</a>.
+If we combined this validation with a limited share count so that we could brute force the ids by attempting every permutation of
+shares and ids until we recovered a valid mnemonic, we could avoid storing the id.</p>
+<p>We decided against this approach and in favor of storing the id because, while the id may leak some information, recovery validation also leaks information.
+Without validation, an attacker may never know when they have sufficient shares for recovery. With validation, the status of recovery is known.</p>
+<p>To mitigate leaking information, users can consider using an alias for ids or obscuring them in some manner.</p>
+<h2 id="references-and-credits">References and Credits</h2>
+<p>This specification leans heavily on prior work, including:</p>
+<ul>
+<li>The <a href="https://github.com/satoshilabs/slips/blob/master/slip-0039.html">SLIP-0039 Specification</a></li>
+<li>Grempe's <a href="https://github.com/grempe/secrets.js">secrets.js</a> implementation of Shamir's Secret Sharing Scheme</li>
+</ul>
+<h2 id="copyright">Copyright</h2>
+<p>Copyright and related rights waived via <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>.</p>
+
+    </body>
+    </html>
